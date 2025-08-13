@@ -27,6 +27,7 @@ class GPSRTKFactGroup : public FactGroup
     Q_PROPERTY(Fact *valid              READ valid              CONSTANT)
     Q_PROPERTY(Fact *active             READ active             CONSTANT)
     Q_PROPERTY(Fact *numSatellites      READ numSatellites      CONSTANT)
+    Q_PROPERTY(Fact *hasPreConfiguredRTCM READ hasPreConfiguredRTCM CONSTANT)
 
 public:
     explicit GPSRTKFactGroup(QObject *parent = nullptr);
@@ -41,6 +42,7 @@ public:
     Fact *valid() { return &_validFact; }
     Fact *active() { return &_activeFact; }
     Fact *numSatellites() { return &_numSatellitesFact; }
+    Fact *hasPreConfiguredRTCM() { return &_hasPreConfiguredRTCMFact; }
 
 private:
     Fact _connectedFact = Fact(0, QStringLiteral("connected"), FactMetaData::valueTypeBool);
@@ -52,4 +54,5 @@ private:
     Fact _validFact = Fact(0, QStringLiteral("valid"), FactMetaData::valueTypeBool);
     Fact _activeFact = Fact(0, QStringLiteral("active"), FactMetaData::valueTypeBool);
     Fact _numSatellitesFact = Fact(0, QStringLiteral("numSatellites"), FactMetaData::valueTypeInt32);
+    Fact _hasPreConfiguredRTCMFact = Fact(0, QStringLiteral("hasPreConfiguredRTCM"), FactMetaData::valueTypeBool);
 };

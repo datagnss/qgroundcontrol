@@ -32,6 +32,7 @@ void RTCMMavlink::RTCMDataUpdate(QByteArrayView data)
 {
 #ifdef QT_DEBUG
     _calculateBandwith(data.size());
+    qCDebug(RTCMMavlinkLog) << QString("Received RTCM data: %1 bytes - %2").arg(data.size()).arg(QString(data.toByteArray().toHex()));
 #endif
 
     mavlink_gps_rtcm_data_t gpsRtcmData{};
@@ -66,10 +67,13 @@ void RTCMMavlink::RTCMDataUpdate(QByteArrayView data)
 void RTCMMavlink::_sendMessageToVehicle(const mavlink_gps_rtcm_data_t &data)
 {
     QmlObjectListModel* const vehicles = MultiVehicleManager::instance()->vehicles();
+    qCWarning(RTCMMavlinkLog) << QString("*** SENDING RTCM TO %1 VEHICLES, DATA LEN: %2 ***").arg(vehicles->count()).arg(data.len);
+    
     for (qsizetype i = 0; i < vehicles->count(); i++) {
         Vehicle* const vehicle = qobject_cast<Vehicle*>(vehicles->get(i));
         const SharedLinkInterfacePtr sharedLink = vehicle->vehicleLinkManager()->primaryLink().lock();
         if (sharedLink) {
+            qCDebug(RTCMMavlinkLog) << QString("Sending RTCM to vehicle %1 via link").arg(i);
             mavlink_message_t message;
             (void) mavlink_msg_gps_rtcm_data_encode_chan(
                 MAVLinkProtocol::instance()->getSystemId(),
@@ -79,6 +83,8 @@ void RTCMMavlink::_sendMessageToVehicle(const mavlink_gps_rtcm_data_t &data)
                 &data
             );
             (void) vehicle->sendMessageOnLinkThreadSafe(sharedLink.get(), message);
+        } else {
+            qCDebug(RTCMMavlinkLog) << QString("Vehicle %1 has no primary link").arg(i);
         }
     }
 }

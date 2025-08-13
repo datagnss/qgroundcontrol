@@ -73,6 +73,7 @@ bool QGCSerialPortInfo::_loadJsonData()
         { _jsonProductIDKey, QJsonValue::Double, true },
         { _jsonBoardClassKey, QJsonValue::String, true },
         { _jsonNameKey, QJsonValue::String, true },
+        { _jsonPreConfiguredRTCMKey, QJsonValue::Bool, false },
     };
     const QJsonArray rgBoardInfo = json[_jsonBoardInfoKey].toArray();
     for (const QJsonValue &jsonValue : rgBoardInfo) {
@@ -91,7 +92,8 @@ bool QGCSerialPortInfo::_loadJsonData()
             boardObject[_jsonVendorIDKey].toInt(),
             boardObject[_jsonProductIDKey].toInt(),
             _boardClassStringToType(boardObject[_jsonBoardClassKey].toString()),
-            boardObject[_jsonNameKey].toString()
+            boardObject[_jsonNameKey].toString(),
+            boardObject[_jsonPreConfiguredRTCMKey].toBool(false)
         };
         if (boardInfo.boardType == BoardTypeUnknown) {
             qCWarning(QGCSerialPortInfoLog) << "Bad board class" << boardObject[_jsonBoardClassKey].toString();
@@ -280,6 +282,25 @@ bool QGCSerialPortInfo::isBootloader() const
 bool QGCSerialPortInfo::isBlackCube() const
 {
     return description().contains(QStringLiteral("CubeBlack"));
+}
+
+bool QGCSerialPortInfo::getPreConfiguredRTCM() const
+{
+    if (!_loadJsonData() || !_jsonDataValid) {
+        return false;
+    }
+
+    if (isNull()) {
+        return false;
+    }
+
+    for (const BoardInfo_t &boardInfo : _boardInfoList) {
+        if ((vendorIdentifier() == boardInfo.vendorId) && ((productIdentifier() == boardInfo.productId) || (boardInfo.productId == 0))) {
+            return boardInfo.preConfiguredRTCM;
+        }
+    }
+
+    return false;
 }
 
 bool QGCSerialPortInfo::isSystemPort(const QSerialPortInfo &port)

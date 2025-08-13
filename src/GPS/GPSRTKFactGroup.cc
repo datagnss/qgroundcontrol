@@ -26,6 +26,7 @@ GPSRTKFactGroup::GPSRTKFactGroup(QObject *parent)
     _addFact(&_validFact);
     _addFact(&_activeFact);
     _addFact(&_numSatellitesFact);
+    _addFact(&_hasPreConfiguredRTCMFact);
 }
 
 GPSRTKFactGroup::~GPSRTKFactGroup()

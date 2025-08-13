@@ -41,6 +41,7 @@ public:
     };
 
     bool getBoardInfo(BoardType_t &boardType, QString &name) const;
+    bool getPreConfiguredRTCM() const;
 
     /// @return true: we can flash this board type
     bool canFlash() const;
@@ -76,6 +77,7 @@ private:
         int productId;
         BoardType_t boardType;
         QString name;
+        bool preConfiguredRTCM = false;
     };
     static QList<BoardInfo_t> _boardInfoList;
 
@@ -97,5 +99,6 @@ private:
     static constexpr const char *_jsonNameKey = "name";
     static constexpr const char *_jsonRegExpKey = "regExp";
     static constexpr const char *_jsonAndroidOnlyKey = "androidOnly";
+    static constexpr const char *_jsonPreConfiguredRTCMKey = "preConfiguredRTCM";
 };
 Q_DECLARE_METATYPE(QGCSerialPortInfo)

@@ -32,6 +32,7 @@ ToolIndicatorPage {
     readonly property var    _ublox:              0b1000
     readonly property var    _all:                0b1111
     property var             settingsDisplayId:     _all
+    property bool            hasPreConfiguredRTCM: QGroundControl.gpsRtk.hasPreConfiguredRTCM.value
 
     function updateSettingsDisplayId() {
         switch(manufacturer) {
@@ -164,6 +165,13 @@ ToolIndicatorPage {
                     checked:    useFixedPosition == BaseModeDefinition.BaseFixed
                     onClicked:  rtkSettings.useFixedBasePosition.rawValue = BaseModeDefinition.BaseFixed
                     visible:    settingsDisplayId & _all
+                }
+
+                QGCRadioButton {
+                    text: qsTr("Pre-configured RTCM")
+                    checked:    useFixedPosition == BaseModeDefinition.BasePreConfiguredRTCM
+                    onClicked:  rtkSettings.useFixedBasePosition.rawValue = BaseModeDefinition.BasePreConfiguredRTCM
+                    visible:    true // TODO: Change back to: hasPreConfiguredRTCM && (settingsDisplayId & _all)
                 }
             }
 

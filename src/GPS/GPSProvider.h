@@ -48,6 +48,7 @@ public:
         double fixedBaseLongitude = 0.;
         float fixedBaseAltitudeMeters = 0.f;
         float fixedBaseAccuracyMeters = 0.f;
+        bool preConfiguredRTCM = false;
     };
 
     GPSProvider(const QString &device, GPSType type, const rtk_data_s &rtkData, const std::atomic_bool &requestStop, QObject *parent = nullptr);

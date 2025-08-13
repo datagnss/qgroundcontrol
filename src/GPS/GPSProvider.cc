@@ -63,6 +63,8 @@ void GPSProvider::_publishSensorGPS()
 
 void GPSProvider::_gotRTCMData(const uint8_t *data, size_t len)
 {
+    qCDebug(GPSProviderLog) << QString("*** GPS Provider received RTCM data: %1 bytes ***").arg(len);
+    qCWarning(GPSProviderLog) << QString("RTCM DATA RECEIVED: %1 bytes").arg(len); // 使用Warning级别确保显示
     const QByteArray message(reinterpret_cast<const char*>(data), len);
     emit RTCMDataUpdate(message);
 }
@@ -83,7 +85,16 @@ int GPSProvider::callback(GPSCallbackType type, void *data1, int data2)
                 return 0;
             }
         }
-        return _serial->read(reinterpret_cast<char*>(data1), data2);
+        {
+            const qint64 bytesRead = _serial->read(reinterpret_cast<char*>(data1), data2);
+            if (bytesRead > 0) {
+                qCDebug(GPSProviderLog) << QString("Read %1 bytes from serial port").arg(bytesRead);
+                // 显示前16字节的数据内容 
+                QByteArray debugData(reinterpret_cast<char*>(data1), std::min(static_cast<int>(bytesRead), 16));
+                qCDebug(GPSProviderLog) << "Data:" << debugData.toHex() << debugData;
+            }
+            return bytesRead;
+        }
     case GPSCallbackType::writeDeviceData:
         if (_serial->write(reinterpret_cast<char*>(data1), data2) >= 0) {
             if (_serial->waitForBytesWritten(-1)) {
@@ -197,7 +208,13 @@ bool GPSProvider::_connectSerial()
         }
     }
 
-    (void) _serial->setBaudRate(QSerialPort::Baud9600);
+    // Use 230400 baud for pre-configured RTCM devices, 9600 for others
+    if (_rtkData.preConfiguredRTCM && _rtkData.useFixedBaseLocation == BaseModeDefinition::Mode::BasePreConfiguredRTCM) {
+        (void) _serial->setBaudRate(230400);
+        qCDebug(GPSProviderLog) << "Using 230400 baud for pre-configured RTCM device";
+    } else {
+        (void) _serial->setBaudRate(QSerialPort::Baud9600);
+    }
     (void) _serial->setDataBits(QSerialPort::Data8);
     (void) _serial->setParity(QSerialPort::NoParity);
     (void) _serial->setStopBits(QSerialPort::OneStop);
@@ -238,6 +255,12 @@ GPSBaseStationSupport *GPSProvider::_connectGPS()
             gpsDriver->setBasePosition(_rtkData.fixedBaseLatitude, _rtkData.fixedBaseLongitude, _rtkData.fixedBaseAltitudeMeters, _rtkData.fixedBaseAccuracyMeters * 1000.0f);
             break;
 
+        case BaseModeDefinition::Mode::BasePreConfiguredRTCM:
+            // Skip survey-in and fixed position setup - device is already pre-configured to output RTCM
+            qCWarning(GPSProviderLog) << "*** USING PRE-CONFIGURED RTCM MODE ***";
+            qCWarning(GPSProviderLog) << "Skipping survey-in/fixed position setup";
+            break;
+
         case BaseModeDefinition::Mode::BaseSurveyIn:
         default:
             gpsDriver->setSurveyInSpecs(_rtkData.surveyInAccMeters * 10000.f, _rtkData.surveyInDurationSecs);
@@ -246,8 +269,28 @@ GPSBaseStationSupport *GPSProvider::_connectGPS()
 
     _gpsConfig.output_mode = GPSHelper::OutputMode::RTCM;
 
-    if (gpsDriver->configure(baudrate, _gpsConfig) != 0) {
-        return nullptr;
+    // For pre-configured RTCM devices, use GPSAndRTCM mode to receive both GPS data and RTCM
+    if (_rtkData.preConfiguredRTCM && _rtkData.useFixedBaseLocation == BaseModeDefinition::Mode::BasePreConfiguredRTCM) {
+        qCWarning(GPSProviderLog) << "*** CONFIGURING PRE-CONFIGURED RTCM DEVICE ***";
+        qCWarning(GPSProviderLog) << "Using GPSAndRTCM mode for pre-configured RTCM device";
+        // Use GPSAndRTCM mode to receive both NMEA GPS data and RTCM data
+        _gpsConfig.output_mode = GPSHelper::OutputMode::GPSAndRTCM;
+        qCWarning(GPSProviderLog) << "Set output mode to GPSAndRTCM";
+        if (gpsDriver->configure(baudrate, _gpsConfig) != 0) {
+            qCWarning(GPSProviderLog) << "GPS driver configure failed!";
+            return nullptr;
+        }
+        qCWarning(GPSProviderLog) << "GPS driver configured successfully";
+        // Emit initial survey-in status to indicate the device is ready for RTCM transmission
+        QMetaObject::invokeMethod(this, [this]() {
+            emit surveyInStatus(0.0f, 0.0f, 0.0, 0.0, 0.0f, true, false);
+        }, Qt::QueuedConnection);
+        qCWarning(GPSProviderLog) << "Set initial survey-in status: valid=true, active=false";
+    } else {
+        qCWarning(GPSProviderLog) << QString("Using standard RTK mode: preConfigured=%1, mode=%2").arg(_rtkData.preConfiguredRTCM).arg(static_cast<int>(_rtkData.useFixedBaseLocation));
+        if (gpsDriver->configure(baudrate, _gpsConfig) != 0) {
+            return nullptr;
+        }
     }
 
     return gpsDriver;

@@ -76,6 +76,11 @@ void GPSRtk::connectGPS(const QString &device, QStringView gps_type)
         rtkSettings->baseReceiverManufacturers()->setRawValue(3); // Femto
         qCDebug(GPSRtkLog) << "Connecting Femtomes device";
 
+    } else if (gps_type.contains(QStringLiteral("datagnss"), Qt::CaseInsensitive)) {
+        type = GPSProvider::GPSType::u_blox; // Use u-blox driver for DATAGNSS
+        rtkSettings->baseReceiverManufacturers()->setRawValue(4); // Ublox
+        qCDebug(GPSRtkLog) << "Connecting DATAGNSS device (using u-blox driver)";
+
     } else if(gps_type.contains(QStringLiteral("blox"), Qt::CaseInsensitive)) {
         type = GPSProvider::GPSType::u_blox;
         rtkSettings->baseReceiverManufacturers()->setRawValue(4); // Ublox
@@ -96,7 +101,8 @@ void GPSRtk::connectGPS(const QString &device, QStringView gps_type)
         rtkSettings->fixedBasePositionLatitude()->rawValue().toDouble(),
         rtkSettings->fixedBasePositionLongitude()->rawValue().toDouble(),
         rtkSettings->fixedBasePositionAltitude()->rawValue().toFloat(),
-        rtkSettings->fixedBasePositionAccuracy()->rawValue().toFloat()
+        rtkSettings->fixedBasePositionAccuracy()->rawValue().toFloat(),
+        _gpsRtkFactGroup->hasPreConfiguredRTCM()->rawValue().toBool()
     };
     _gpsProvider = new GPSProvider(
         device,
@@ -109,6 +115,7 @@ void GPSRtk::connectGPS(const QString &device, QStringView gps_type)
 
     _rtcmMavlink = new RTCMMavlink(this);
     (void) connect(_gpsProvider, &GPSProvider::RTCMDataUpdate, _rtcmMavlink, &RTCMMavlink::RTCMDataUpdate);
+    qCDebug(GPSRtkLog) << "RTCMMavlink connected for RTCM data forwarding";
 
     (void) connect(_gpsProvider, &GPSProvider::satelliteInfoUpdate, this, &GPSRtk::_satelliteInfoUpdate);
     (void) connect(_gpsProvider, &GPSProvider::sensorGpsUpdate, this, &GPSRtk::_sensorGpsUpdate);
@@ -160,4 +167,10 @@ void GPSRtk::_sensorGnssRelativeUpdate(const sensor_gnss_relative_s &msg)
 void GPSRtk::_sensorGpsUpdate(const sensor_gps_s &msg)
 {
     qCDebug(GPSRtkLog) << Q_FUNC_INFO << QStringLiteral("alt=%1, long=%2, lat=%3").arg(msg.altitude_msl_m).arg(msg.longitude_deg).arg(msg.latitude_deg);
+}
+
+void GPSRtk::setPreConfiguredRTCM(bool hasPreConfiguredRTCM)
+{
+    qCDebug(GPSRtkLog) << "Setting preConfiguredRTCM to:" << hasPreConfiguredRTCM;
+    _gpsRtkFactGroup->hasPreConfiguredRTCM()->setRawValue(hasPreConfiguredRTCM);
 }

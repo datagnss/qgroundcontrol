@@ -23,6 +23,7 @@ public:
     enum class Mode {
         BaseSurveyIn = 0,
         BaseFixed    = 1,
+        BasePreConfiguredRTCM = 2,
     };
     Q_ENUM(Mode)
 

@@ -36,6 +36,7 @@ public:
     void disconnectGPS();
     bool connected() const;
     FactGroup *gpsRtkFactGroup();
+    void setPreConfiguredRTCM(bool hasPreConfiguredRTCM);
 
 private slots:
     void _satelliteInfoUpdate(const satellite_info_s &msg);
