@@ -104,17 +104,30 @@ ToolIndicatorPage {
                 visible:    QGroundControl.gpsRtk.connected.value
 
                 QGCLabel {
-                    text: (QGroundControl.gpsRtk.active.value) ? qsTr("Survey-in Active") : qsTr("RTK Streaming")
+                    text: {
+                        if (QGroundControl.gpsRtk.active.value) {
+                            return qsTr("Survey-in Active")
+                        } else {
+                            var dataRate = QGroundControl.gpsRtk.rtcmDataRate.value
+                            if (dataRate > 0) {
+                                return qsTr("RTK Streaming") + " (" + dataRate + " B/s)"
+                            } else {
+                                return qsTr("RTK Streaming")
+                            }
+                        }
+                    }
                 }
 
                 LabelledLabel {
                     label:      qsTr("Satellites")
                     labelText:  QGroundControl.gpsRtk.numSatellites.value
+                    visible:    useFixedPosition != BaseModeDefinition.BasePreConfiguredRTCM
                 }
 
                 LabelledLabel {
                     label:      qsTr("Duration")
                     labelText:  QGroundControl.gpsRtk.currentDuration.value + ' s'
+                    visible:    useFixedPosition != BaseModeDefinition.BasePreConfiguredRTCM
                 }
 
                 LabelledLabel {

@@ -18,6 +18,9 @@
 #include <sbf.h>
 #include <ubx.h>
 
+// Forward declare for dynamic_cast
+class GPSDriverUBX;
+
 #ifdef Q_OS_ANDROID
 #include "qserialport.h"
 #else
@@ -63,8 +66,10 @@ void GPSProvider::_publishSensorGPS()
 
 void GPSProvider::_gotRTCMData(const uint8_t *data, size_t len)
 {
+#ifdef QT_DEBUG
     qCDebug(GPSProviderLog) << QString("*** GPS Provider received RTCM data: %1 bytes ***").arg(len);
-    qCWarning(GPSProviderLog) << QString("RTCM DATA RECEIVED: %1 bytes").arg(len); // 使用Warning级别确保显示
+    qCDebug(GPSProviderLog) << QString("RTCM DATA RECEIVED: %1 bytes").arg(len);
+#endif
     const QByteArray message(reinterpret_cast<const char*>(data), len);
     emit RTCMDataUpdate(message);
 }
@@ -88,10 +93,12 @@ int GPSProvider::callback(GPSCallbackType type, void *data1, int data2)
         {
             const qint64 bytesRead = _serial->read(reinterpret_cast<char*>(data1), data2);
             if (bytesRead > 0) {
-                qCDebug(GPSProviderLog) << QString("Read %1 bytes from serial port").arg(bytesRead);
-                // 显示前16字节的数据内容 
-                QByteArray debugData(reinterpret_cast<char*>(data1), std::min(static_cast<int>(bytesRead), 16));
-                qCDebug(GPSProviderLog) << "Data:" << debugData.toHex() << debugData;
+                // For pre-configured RTCM devices, send all data directly as RTCM
+                if (_rtkData.preConfiguredRTCM && 
+                    _rtkData.useFixedBaseLocation == BaseModeDefinition::Mode::BasePreConfiguredRTCM) {
+                    QByteArray rawData(reinterpret_cast<char*>(data1), static_cast<int>(bytesRead));
+                    _gotRTCMData(reinterpret_cast<uint8_t*>(data1), bytesRead);
+                }
             }
             return bytesRead;
         }
@@ -105,6 +112,7 @@ int GPSProvider::callback(GPSCallbackType type, void *data1, int data2)
     case GPSCallbackType::setBaudrate:
         return (_serial->setBaudRate(data2) ? 0 : -1);
     case GPSCallbackType::gotRTCMMessage:
+        qCDebug(GPSProviderLog) << QString("*** RECEIVED RTCM MESSAGE: %1 bytes ***").arg(data2);
         _gotRTCMData(reinterpret_cast<uint8_t*>(data1), data2);
         break;
     case GPSCallbackType::surveyInStatus:
@@ -208,13 +216,7 @@ bool GPSProvider::_connectSerial()
         }
     }
 
-    // Use 230400 baud for pre-configured RTCM devices, 9600 for others
-    if (_rtkData.preConfiguredRTCM && _rtkData.useFixedBaseLocation == BaseModeDefinition::Mode::BasePreConfiguredRTCM) {
-        (void) _serial->setBaudRate(230400);
-        qCDebug(GPSProviderLog) << "Using 230400 baud for pre-configured RTCM device";
-    } else {
-        (void) _serial->setBaudRate(QSerialPort::Baud9600);
-    }
+    (void) _serial->setBaudRate(QSerialPort::Baud9600);
     (void) _serial->setDataBits(QSerialPort::Data8);
     (void) _serial->setParity(QSerialPort::NoParity);
     (void) _serial->setStopBits(QSerialPort::OneStop);
@@ -244,9 +246,14 @@ GPSBaseStationSupport *GPSProvider::_connectGPS()
         gpsDriver = new GPSDriverFemto(&_callbackEntry, this, &_sensorGps, &_satelliteInfo);
         baudrate = 0;
         break;
+    case GPSType::datagnss:
+        // now we can use the u-blox driver for DATAGNSS devices
+        gpsDriver = new GPSDriverUBX(GPSDriverUBX::Interface::UART, &_callbackEntry, this, &_sensorGps, &_satelliteInfo);
+        baudrate = 230400;
+        break;
     default:
         // GPSDriverEmlidReach, GPSDriverMTK, GPSDriverNMEA
-        qCWarning(GPSProviderLog) << "Unsupported GPS Type:" << static_cast<int>(_type);
+        qCDebug(GPSProviderLog) << "Unsupported GPS Type:" << static_cast<int>(_type);
         return nullptr;
     }
 
@@ -257,10 +264,11 @@ GPSBaseStationSupport *GPSProvider::_connectGPS()
 
         case BaseModeDefinition::Mode::BasePreConfiguredRTCM:
             // Skip survey-in and fixed position setup - device is already pre-configured to output RTCM
-            qCWarning(GPSProviderLog) << "*** USING PRE-CONFIGURED RTCM MODE ***";
-            qCWarning(GPSProviderLog) << "Skipping survey-in/fixed position setup";
+#ifdef QT_DEBUG
+            qCDebug(GPSProviderLog) << "*** USING PRE-CONFIGURED RTCM MODE ***";
+            qCDebug(GPSProviderLog) << "Skipping survey-in/fixed position setup";
+#endif
             break;
-
         case BaseModeDefinition::Mode::BaseSurveyIn:
         default:
             gpsDriver->setSurveyInSpecs(_rtkData.surveyInAccMeters * 10000.f, _rtkData.surveyInDurationSecs);
@@ -269,28 +277,17 @@ GPSBaseStationSupport *GPSProvider::_connectGPS()
 
     _gpsConfig.output_mode = GPSHelper::OutputMode::RTCM;
 
-    // For pre-configured RTCM devices, use GPSAndRTCM mode to receive both GPS data and RTCM
-    if (_rtkData.preConfiguredRTCM && _rtkData.useFixedBaseLocation == BaseModeDefinition::Mode::BasePreConfiguredRTCM) {
-        qCWarning(GPSProviderLog) << "*** CONFIGURING PRE-CONFIGURED RTCM DEVICE ***";
-        qCWarning(GPSProviderLog) << "Using GPSAndRTCM mode for pre-configured RTCM device";
-        // Use GPSAndRTCM mode to receive both NMEA GPS data and RTCM data
-        _gpsConfig.output_mode = GPSHelper::OutputMode::GPSAndRTCM;
-        qCWarning(GPSProviderLog) << "Set output mode to GPSAndRTCM";
-        if (gpsDriver->configure(baudrate, _gpsConfig) != 0) {
-            qCWarning(GPSProviderLog) << "GPS driver configure failed!";
-            return nullptr;
-        }
-        qCWarning(GPSProviderLog) << "GPS driver configured successfully";
+    // For pre-configured RTCM devices, skip configuration
+    if (_rtkData.preConfiguredRTCM && 
+        _rtkData.useFixedBaseLocation == BaseModeDefinition::Mode::BasePreConfiguredRTCM) {
         // Emit initial survey-in status to indicate the device is ready for RTCM transmission
         QMetaObject::invokeMethod(this, [this]() {
             emit surveyInStatus(0.0f, 0.0f, 0.0, 0.0, 0.0f, true, false);
         }, Qt::QueuedConnection);
-        qCWarning(GPSProviderLog) << "Set initial survey-in status: valid=true, active=false";
-    } else {
-        qCWarning(GPSProviderLog) << QString("Using standard RTK mode: preConfigured=%1, mode=%2").arg(_rtkData.preConfiguredRTCM).arg(static_cast<int>(_rtkData.useFixedBaseLocation));
-        if (gpsDriver->configure(baudrate, _gpsConfig) != 0) {
-            return nullptr;
-        }
+    } 
+
+    if (gpsDriver->configure(baudrate, _gpsConfig) != 0) {
+        return nullptr;
     }
 
     return gpsDriver;

@@ -37,7 +37,8 @@ public:
         u_blox,
         trimble,
         septentrio,
-        femto
+        femto,
+        datagnss
     };
 
     struct rtk_data_s {

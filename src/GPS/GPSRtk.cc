@@ -77,9 +77,14 @@ void GPSRtk::connectGPS(const QString &device, QStringView gps_type)
         qCDebug(GPSRtkLog) << "Connecting Femtomes device";
 
     } else if (gps_type.contains(QStringLiteral("datagnss"), Qt::CaseInsensitive)) {
-        type = GPSProvider::GPSType::u_blox; // Use u-blox driver for DATAGNSS
-        rtkSettings->baseReceiverManufacturers()->setRawValue(4); // Ublox
-        qCDebug(GPSRtkLog) << "Connecting DATAGNSS device (using u-blox driver)";
+        type = GPSProvider::GPSType::datagnss; 
+        rtkSettings->baseReceiverManufacturers()->setRawValue(4);  // still use u-blox for DATAGNSS
+        
+        // Auto-configure DATAGNSS devices as pre-configured RTCM
+        setPreConfiguredRTCM(true);
+        rtkSettings->useFixedBasePosition()->setRawValue(static_cast<int>(BaseModeDefinition::Mode::BasePreConfiguredRTCM));
+        
+        qCDebug(GPSRtkLog) << "Connecting DATAGNSS device with pre-configured RTCM mode";
 
     } else if(gps_type.contains(QStringLiteral("blox"), Qt::CaseInsensitive)) {
         type = GPSProvider::GPSType::u_blox;

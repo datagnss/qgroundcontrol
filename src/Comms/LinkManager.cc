@@ -852,27 +852,7 @@ void LinkManager::_addSerialAutoConnectLink()
                 _nmeaPort->setBaudRate(static_cast<qint32>(_nmeaBaud));
                 qCDebug(LinkManagerLog) << "Configuring nmea baudrate" << _nmeaBaud;
             }
-        } else {
-            // 临时调试：显示所有未识别设备的信息
-            qCDebug(LinkManagerLog) << "Unknown device:" << portInfo.portName() 
-                                   << "VID:" << QString("0x%1").arg(portInfo.vendorIdentifier(), 4, 16, QChar('0'))
-                                   << "PID:" << QString("0x%1").arg(portInfo.productIdentifier(), 4, 16, QChar('0'))
-                                   << "Description:" << portInfo.description()
-                                   << "Manufacturer:" << portInfo.manufacturer();
-                                   
-            // 自动识别CH340设备作为RTK GPS设备
-            if (portInfo.description().contains("CH340", Qt::CaseInsensitive)) {
-                qCWarning(LinkManagerLog) << QString("*** AUTO CONNECTING CH340 DEVICE AS RTK GPS: %1 ***").arg(portInfo.portName());
-                qCWarning(LinkManagerLog) << "Port:" << portInfo.portName() << "Description:" << portInfo.description();
-                boardType = QGCSerialPortInfo::BoardTypeRTKGPS;
-                boardName = "DATAGNSS RTK GPS";
-                // 设置preConfiguredRTCM标志
-                GPSManager::instance()->gpsRtk()->setPreConfiguredRTCM(true);
-                qCWarning(LinkManagerLog) << QString("Set preConfiguredRTCM = true for %1").arg(portInfo.portName());
-            }
-        }
-        
-        if (portInfo.getBoardInfo(boardType, boardName)) {
+        } else if (portInfo.getBoardInfo(boardType, boardName)) {
             // Should we be auto-connecting to this board type?
             if (!_allowAutoConnectToBoard(boardType)) {
                 continue;
@@ -906,23 +886,10 @@ void LinkManager::_addSerialAutoConnectLink()
                     pSerialConfig = new SerialConfiguration(tr("%1 on %2 (AutoConnect)").arg(boardName, portInfo.portName().trimmed()));
                     break;
                 case QGCSerialPortInfo::BoardTypeRTKGPS:
-                {
                     qCDebug(LinkManagerLog) << "RTK GPS auto-connected" << portInfo.portName().trimmed();
-                    qCDebug(LinkManagerLog) << "Device VID:" << QString("0x%1").arg(portInfo.vendorIdentifier(), 4, 16, QChar('0'));
-                    qCDebug(LinkManagerLog) << "Device PID:" << QString("0x%1").arg(portInfo.productIdentifier(), 4, 16, QChar('0'));
-                    qCDebug(LinkManagerLog) << "Device VID (decimal):" << portInfo.vendorIdentifier();
-                    qCDebug(LinkManagerLog) << "Device PID (decimal):" << portInfo.productIdentifier();
-                    
                     _autoConnectRTKPort = portInfo.systemLocation();
-                    
-                    // Check if this device supports pre-configured RTCM
-                    bool hasPreConfiguredRTCM = portInfo.getPreConfiguredRTCM();
-                    qCDebug(LinkManagerLog) << "Device hasPreConfiguredRTCM:" << hasPreConfiguredRTCM;
-                    GPSManager::instance()->gpsRtk()->setPreConfiguredRTCM(hasPreConfiguredRTCM);
-                    
                     GPSManager::instance()->gpsRtk()->connectGPS(portInfo.systemLocation(), boardName);
                     break;
-                }
                 default:
                     qCWarning(LinkManagerLog) << "Internal error: Unknown board type" << boardType;
                     continue;
@@ -945,7 +912,6 @@ void LinkManager::_addSerialAutoConnectLink()
     // Check for RTK GPS connection gone
     if (!_autoConnectRTKPort.isEmpty() && !currentPorts.contains(_autoConnectRTKPort)) {
         qCDebug(LinkManagerLog) << "RTK GPS disconnected" << _autoConnectRTKPort;
-        GPSManager::instance()->gpsRtk()->setPreConfiguredRTCM(false);
         GPSManager::instance()->gpsRtk()->disconnectGPS();
         _autoConnectRTKPort.clear();
     }
